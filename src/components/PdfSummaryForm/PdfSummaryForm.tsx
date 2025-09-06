@@ -2,9 +2,27 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Upload, Link, FileText, Archive, X } from 'lucide-react'
 import Spinner from '../common/Spinner'
 import FollowUpCard from './FollowUpCard'
 import FeedbackModal from './FeedbackModal'
+import MarkdownPreview from '../common/MarkdownPreview'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import { useArchive } from '@/contexts/ArchiveContext'
+
+// 마크다운에서 첫 번째 대제목(h1) 추출하는 함수
+const extractTitle = (content: string): string => {
+  const lines = content.split('\n')
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('# ')) {
+      return trimmed.substring(2).trim()
+    }
+  }
+  return ''
+}
 
 export type Lang = 'KO' | 'EN' | 'CN' | 'JP'
 const LANG_OPTIONS = [
@@ -15,15 +33,22 @@ const LANG_OPTIONS = [
 ] as const
 
 type Phase = 'input' | 'summary'
+type InputType = 'url' | 'file'
 
-export default function PdfSummaryForm() {
+interface PdfSummaryFormProps {
+  isDeepResearchMode?: boolean
+}
+
+export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummaryFormProps) {
   /* ── 상태 ── */
   const [phase, setPhase] = useState<Phase>('input')
+  const [inputType, setInputType] = useState<InputType>('url')
   const [status, setStatus] = useState<
     'idle' | 'loading-summary' | 'loading-followup' | 'submitting-feedback'
   >('idle')
   const [error, setError] = useState('')
   const [pdfUrl, setPdfUrl] = useState('')
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [lang, setLang] = useState<Lang>('KO')
   const [summary, setSummary] = useState('')
   const [followupLog, setFollowupLog] = useState<string[]>([])
@@ -33,6 +58,68 @@ export default function PdfSummaryForm() {
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   const [thanks, setThanks] = useState(false)
+
+  /* ── 전체보기 모달 ── */
+  const [showFullView, setShowFullView] = useState(false)
+
+  /* ── 파일 업로드 관련 ── */
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  /* ── 아카이브 관련 ── */
+  const { addToArchive } = useArchive()
+
+  const handleArchive = () => {
+    if (!summary) return
+
+    const title = isDeepResearchMode 
+      ? `딥리서치 분석 - ${pdfUrl || uploadedFile?.name || 'PDF 문서'}`
+      : `PDF 요약 - ${pdfUrl || uploadedFile?.name || 'PDF 문서'}`
+
+    addToArchive({
+      title,
+      content: summary,
+      pdfUrl: pdfUrl || undefined,
+      language: lang,
+      isDeepResearch: isDeepResearchMode,
+    })
+
+    alert('아카이브에 저장되었습니다!')
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      if (file.type !== 'application/pdf') {
+        alert('PDF 파일만 업로드 가능합니다.')
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) { // 10MB 제한
+        alert('파일 크기는 10MB 이하여야 합니다.')
+        return
+      }
+      setUploadedFile(file)
+      setPdfUrl('') // URL 입력 초기화
+    }
+  }
+
+  const handleFileRemove = () => {
+    setUploadedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleInputTypeChange = (type: InputType) => {
+    setInputType(type)
+    if (type === 'url') {
+      setUploadedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    } else {
+      setPdfUrl('')
+    }
+  }
 
   /* ── 파일 ID 유틸 ── */
   const fileIdRef = useRef<string | null>(null)
@@ -236,32 +323,134 @@ export default function PdfSummaryForm() {
         {/* ── 왼쪽 카드: 입력 + (요약) ── */}
         <motion.section
           layout
-          className="flex h-full flex-col space-y-6 rounded-3xl border
-                     border-gray-200 bg-white/80 p-8 shadow-xl backdrop-blur-sm
-                     dark:border-neutral-700 dark:bg-neutral-900/70"
+          className={`flex h-full flex-col space-y-6 rounded-3xl border p-8 shadow-xl backdrop-blur-sm transition-all duration-500 ${
+            isDeepResearchMode
+              ? 'border-green-200 bg-green-50/80 dark:border-green-700 dark:bg-green-900/30'
+              : 'border-gray-200 bg-white/80 dark:border-neutral-700 dark:bg-neutral-900/70'
+          }`}
         >
           {/* 제목 */}
-          <h1 className="flex items-center gap-2 text-2xl font-extrabold">
-            PDF 요약
+          <h1 className={`flex items-center gap-2 text-2xl font-extrabold transition-colors duration-500 ${
+            isDeepResearchMode
+              ? 'text-green-700 dark:text-green-300'
+              : 'text-gray-900 dark:text-gray-100'
+          }`}>
+            {isDeepResearchMode ? '딥리서치 PDF 분석' : 'PDF 요약'}
           </h1>
 
-          {/* URL 입력 */}
-          <div className="space-y-2">
-            <label htmlFor="url" className="text-sm font-medium">
-              PDF URL
-            </label>
-            <input
-              id="url"
-              type="url"
-              value={pdfUrl}
-              onChange={e => setPdfUrl(e.target.value)}
-              required
-              placeholder="https://arxiv.org/pdf/xxxx.pdf"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm
-                         shadow-sm focus:border-blue-500 focus:outline-none
-                         focus:ring focus:ring-blue-200 dark:border-neutral-700
-                         dark:bg-neutral-800 dark:text-gray-100"
-            />
+          {/* 입력 방식 선택 탭 */}
+          <div className="space-y-4">
+            <div className={`flex rounded-lg p-1 transition-colors duration-500 ${
+              isDeepResearchMode
+                ? 'bg-green-100 dark:bg-green-900/30'
+                : 'bg-gray-100 dark:bg-neutral-800'
+            }`}>
+              <button
+                type="button"
+                onClick={() => handleInputTypeChange('url')}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  inputType === 'url'
+                    ? isDeepResearchMode
+                      ? 'bg-white text-green-600 shadow-sm dark:bg-green-800 dark:text-green-300'
+                      : 'bg-white text-blue-600 shadow-sm dark:bg-neutral-700 dark:text-blue-400'
+                    : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                }`}
+              >
+                <Link className="h-4 w-4" />
+                URL 입력
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInputTypeChange('file')}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  inputType === 'file'
+                    ? isDeepResearchMode
+                      ? 'bg-white text-green-600 shadow-sm dark:bg-green-800 dark:text-green-300'
+                      : 'bg-white text-blue-600 shadow-sm dark:bg-neutral-700 dark:text-blue-400'
+                    : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                }`}
+              >
+                <Upload className="h-4 w-4" />
+                파일 업로드
+              </button>
+            </div>
+
+            {/* URL 입력 */}
+            {inputType === 'url' && (
+              <div className="space-y-2">
+                <label htmlFor="url" className="text-sm font-medium">
+                  PDF URL
+                </label>
+                <input
+                  id="url"
+                  type="url"
+                  value={pdfUrl}
+                  onChange={e => setPdfUrl(e.target.value)}
+                  placeholder="https://arxiv.org/pdf/xxxx.pdf"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm
+                             shadow-sm focus:border-blue-500 focus:outline-none
+                             focus:ring focus:ring-blue-200 dark:border-neutral-700
+                             dark:bg-neutral-800 dark:text-gray-100"
+                />
+              </div>
+            )}
+
+            {/* 파일 업로드 */}
+            {inputType === 'file' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  PDF 파일 업로드
+                </label>
+                <div className="space-y-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  
+                  {!uploadedFile ? (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex w-full flex-col items-center gap-3 rounded-lg border-2 border-dashed border-gray-300 p-6 text-center hover:border-blue-400 hover:bg-blue-50 dark:border-neutral-600 dark:hover:border-blue-500 dark:hover:bg-blue-900/20"
+                    >
+                      <Upload className="h-8 w-8 text-gray-400" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          PDF 파일을 선택하거나 드래그하세요
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          최대 10MB, PDF 형식만 지원
+                        </p>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-neutral-700 dark:bg-neutral-800">
+                      <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {uploadedFile.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleFileRemove}
+                        className="rounded-lg p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-neutral-700 dark:hover:text-gray-300"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 언어 선택 */}
@@ -289,13 +478,20 @@ export default function PdfSummaryForm() {
           {/* 요약 버튼 */}
           <button
             onClick={handleSummary}
-            disabled={status === 'loading-summary' || !pdfUrl}
-            className="relative flex w-full items-center justify-center gap-2 rounded-lg
-                       bg-blue-600 py-2 font-semibold text-white shadow-lg
-                       transition-colors hover:bg-blue-700 disabled:opacity-60"
+            disabled={status === 'loading-summary' || (inputType === 'url' ? !pdfUrl : !uploadedFile)}
+            className={`relative flex w-full items-center justify-center gap-2 rounded-lg py-2 font-semibold text-white shadow-lg transition-colors disabled:opacity-60 ${
+              isDeepResearchMode
+                ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             {status === 'loading-summary' && <Spinner />}
-            <span>{phase === 'input' ? '요약 만들기' : '요약'}</span>
+            <span>
+              {phase === 'input' 
+                ? (isDeepResearchMode ? '딥리서치 분석 시작' : '요약 만들기')
+                : '요약'
+              }
+            </span>
           </button>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -303,16 +499,13 @@ export default function PdfSummaryForm() {
           {/* 요약 결과 */}
           {phase === 'summary' && (
             <div className="flex flex-col space-y-4">
-              <h2 className="flex items-center gap-2 text-lg font-bold">
-                요약 결과
-              </h2>
-              <pre
-                className="flex-grow max-h-[60vh] overflow-y-auto whitespace-pre-wrap
-                           rounded-xl bg-gray-50 p-4 text-sm leading-relaxed shadow-inner
-                           dark:bg-neutral-800 dark:text-gray-100"
-              >
-                {summary}
-              </pre>
+              <MarkdownPreview
+                content={summary}
+                title=""
+                isDeepResearchMode={isDeepResearchMode}
+                showFullView={true}
+                onFullView={() => setShowFullView(true)}
+              />
             </div>
           )}
         </motion.section>
@@ -329,10 +522,71 @@ export default function PdfSummaryForm() {
                 setShowFeedback(true)
                 setThanks(false)
               }}
+              isDeepResearchMode={isDeepResearchMode}
             />
           )}
         </AnimatePresence>
       </motion.section>
+
+      {/* 전체보기 모달 */}
+      {showFullView && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="flex h-full w-full max-w-6xl flex-col rounded-lg bg-white shadow-xl dark:bg-neutral-800">
+            {/* 모달 헤더 */}
+            <div className={`flex items-center justify-between border-b p-4 ${
+              isDeepResearchMode
+                ? 'border-green-200 dark:border-green-700'
+                : 'border-gray-200 dark:border-neutral-700'
+            }`}>
+              <h2 className={`text-xl font-semibold transition-colors duration-500 ${
+                isDeepResearchMode
+                  ? 'text-green-700 dark:text-green-300'
+                  : 'text-gray-900 dark:text-gray-100'
+              }`}>
+                {(() => {
+                  const extractedTitle = extractTitle(summary)
+                  return extractedTitle || (isDeepResearchMode ? '딥리서치 분석 결과' : '요약 결과')
+                })()} - 전체보기
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleArchive}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                    isDeepResearchMode
+                      ? 'bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600'
+                  }`}
+                >
+                  <Archive className="h-4 w-4" />
+                  아카이브에 저장
+                </button>
+                <button
+                  onClick={() => setShowFullView(false)}
+                  className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-neutral-700 dark:hover:text-gray-300"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* 모달 내용 */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className={`prose prose-lg max-w-none transition-colors duration-500 ${
+                isDeepResearchMode
+                  ? 'prose-green dark:prose-green'
+                  : 'prose-gray dark:prose-gray'
+              }`}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                >
+                  {summary}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 평가 모달 */}
       {showFeedback && (

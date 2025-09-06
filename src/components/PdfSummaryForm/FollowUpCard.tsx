@@ -9,6 +9,7 @@ type Props = {
   followupLog: string[]
   onAsk: (q: string) => void
   onOpenFeedback: () => void
+  isDeepResearchMode?: boolean
 }
 
 export default function FollowUpCard({
@@ -16,6 +17,7 @@ export default function FollowUpCard({
   followupLog,
   onAsk,
   onOpenFeedback,
+  isDeepResearchMode = false,
 }: Props) {
   const [q, setQ] = useState('')
   const ask = () => {
@@ -31,13 +33,20 @@ export default function FollowUpCard({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 64 }}
       transition={{ duration: 0.35 }}
-      className="flex h-full flex-col rounded-3xl border border-gray-200 bg-white
-                 p-8 shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+      className={`flex h-full flex-col rounded-3xl border p-8 shadow-xl transition-all duration-500 ${
+        isDeepResearchMode
+          ? 'border-green-200 bg-green-50/80 dark:border-green-700 dark:bg-green-900/30'
+          : 'border-gray-200 bg-white dark:border-neutral-700 dark:bg-neutral-900'
+      }`}
     >
       {/* ── 입력 ── */}
       <div className="space-y-2">
-        <h2 className="flex items-center gap-2 text-lg font-bold">
-          추가 질문
+        <h2 className={`flex items-center gap-2 text-lg font-bold transition-colors duration-500 ${
+          isDeepResearchMode
+            ? 'text-green-700 dark:text-green-300'
+            : 'text-gray-900 dark:text-gray-100'
+        }`}>
+          {isDeepResearchMode ? '딥리서치 질문' : '추가 질문'}
         </h2>
         <div className="flex flex-col gap-2 sm:flex-row">
           <input
@@ -52,13 +61,19 @@ export default function FollowUpCard({
           <button
             onClick={ask}
             disabled={busy || !q}
-            className="relative flex items-center justify-center gap-2 rounded-lg
-                       bg-green-600 px-4 py-2 font-semibold text-white shadow-lg
-                       transition-colors hover:bg-green-700 disabled:cursor-not-allowed
-                       disabled:opacity-60"
+            className={`relative flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white shadow-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+              isDeepResearchMode
+                ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'
+                : 'bg-green-600 hover:bg-green-700'
+            }`}
           >
             {busy && <Spinner />}
-            <span>{busy ? '답변 중…' : '질문하기'}</span>
+            <span>
+              {busy 
+                ? (isDeepResearchMode ? '분석 중…' : '답변 중…')
+                : (isDeepResearchMode ? '딥리서치 질문' : '질문하기')
+              }
+            </span>
           </button>
         </div>
       </div>
@@ -67,7 +82,11 @@ export default function FollowUpCard({
       {followupLog.length > 0 && (
         <details
           open
-          className="flex-grow rounded-xl bg-gray-50 px-6 py-4 dark:bg-neutral-800/50"
+          className={`flex-grow rounded-xl px-6 py-4 transition-colors duration-500 ${
+            isDeepResearchMode
+              ? 'bg-green-50 dark:bg-green-900/20'
+              : 'bg-gray-50 dark:bg-neutral-800/50'
+          }`}
         >
           <summary className="cursor-pointer text-sm font-medium">
             추가 질문 기록
