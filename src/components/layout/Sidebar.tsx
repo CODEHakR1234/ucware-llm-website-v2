@@ -2,7 +2,6 @@
 
 import { useAuth } from '@/contexts/AuthContext'
 import { User, Settings, Archive, X } from 'lucide-react'
-import { useState } from 'react'
 
 interface SidebarProps {
   isOpen: boolean
@@ -21,12 +20,14 @@ export default function Sidebar({ isOpen, onClose, onNavigate }: SidebarProps) {
           isOpen ? 'opacity-30' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
+        style={{ display: isOpen ? 'block' : 'none' }}
       />
       
       {/* 사이드바 */}
       <div className={`fixed left-0 top-0 z-50 h-full w-80 bg-white shadow-2xl dark:bg-neutral-800 transform transition-transform duration-300 ease-in-out ${
         isOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      }`}
+      style={{ display: isOpen ? 'block' : 'none' }}>
         <div className="flex h-full flex-col">
           {/* 헤더 */}
           <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-neutral-700">

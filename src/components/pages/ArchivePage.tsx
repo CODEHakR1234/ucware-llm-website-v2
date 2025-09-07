@@ -2,13 +2,12 @@
 
 import { useState } from 'react'
 import { FileText, Search, Filter, ArrowLeft, Calendar, Download, Trash2, X } from 'lucide-react'
-import { useArchive } from '@/contexts/ArchiveContext'
+import { useArchive, type ArchiveItem } from '@/contexts/ArchiveContext'
 import MarkdownPreview from '../common/MarkdownPreview'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
-
-// 마크다운에서 첫 번째 대제목(h1) 추출하는 함수
+import rehypeHighlight from 'rehype-highlight'// 마크다운에서 첫 번째 대제목(h1) 추출하는 함수
+import ImagePreview from '../common/ImagePreview'
 const extractTitle = (content: string): string => {
   const lines = content.split('\n')
   for (const line of lines) {
@@ -28,7 +27,7 @@ export default function ArchivePage({ onBack }: ArchivePageProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterLanguage, setFilterLanguage] = useState('all')
   const [showFullView, setShowFullView] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<any>(null)
+  const [selectedItem, setSelectedItem] = useState<ArchiveItem | null>(null)
   const { archiveItems, removeFromArchive } = useArchive()
 
   const filteredItems = archiveItems.filter(item => {
@@ -44,7 +43,7 @@ export default function ArchivePage({ onBack }: ArchivePageProps) {
     }
   }
 
-  const handleDownload = (item: any) => {
+  const handleDownload = (item: ArchiveItem) => {
     // 마크다운 파일로 다운로드
     const blob = new Blob([item.content], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
@@ -57,7 +56,7 @@ export default function ArchivePage({ onBack }: ArchivePageProps) {
     URL.revokeObjectURL(url)
   }
 
-  const handleFullView = (item: any) => {
+  const handleFullView = (item: ArchiveItem) => {
     setSelectedItem(item)
     setShowFullView(true)
   }
@@ -111,7 +110,7 @@ export default function ArchivePage({ onBack }: ArchivePageProps) {
         </div>
 
         {/* 아카이브 목록 */}
-        <div className="space-y-4">
+        <div className="max-h-[calc(100vh-200px)] overflow-y-auto space-y-4 pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800">
           {filteredItems.length === 0 ? (
             <div className="rounded-lg bg-white p-8 text-center shadow-md dark:bg-neutral-800">
               <FileText className="mx-auto h-12 w-12 text-gray-400" />
@@ -218,7 +217,7 @@ export default function ArchivePage({ onBack }: ArchivePageProps) {
             </div>
 
             {/* 모달 내용 */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800">
               <div className={`prose prose-lg max-w-none transition-colors duration-500 ${
                 selectedItem.isDeepResearch
                   ? 'prose-green dark:prose-green'
@@ -227,6 +226,17 @@ export default function ArchivePage({ onBack }: ArchivePageProps) {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight]}
+                  urlTransform={(url) => url}
+                  components={{
+                    img: ({ src, alt }) => (
+                      <ImagePreview
+                        src={src || ''}
+                        alt={alt || '이미지'}
+                        className="my-6"
+                        thumbnail={false}
+                      />
+                    ),
+                  }}
                 >
                   {selectedItem.content}
                 </ReactMarkdown>

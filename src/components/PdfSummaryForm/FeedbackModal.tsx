@@ -15,7 +15,7 @@ type Props = {
 }
 export default function FeedbackModal({ rating, comment, onRating, onComment, busy, thanks, onSubmit, onClose }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm dark:bg-black/80 p-4">
       <div className="w-full max-w-md space-y-6 rounded-3xl bg-white p-8 shadow-2xl dark:bg-neutral-900">
         <h2 className="flex items-center gap-2 text-xl font-bold"><span role="img" aria-label="rate">⭐</span> 서비스 평가</h2>
         {thanks ? (

@@ -11,6 +11,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { useArchive } from '@/contexts/ArchiveContext'
+import { convertUrlsToImages } from '@/utils/imageUtils'
+import ImagePreview from '../common/ImagePreview'
 
 // 마크다운에서 첫 번째 대제목(h1) 추출하는 함수
 const extractTitle = (content: string): string => {
@@ -89,6 +91,20 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      // 딥리서치 모드에서는 파일 타입과 크기 제한 없이 test-markdown.md 렌더링
+      if (isDeepResearchMode) {
+        setUploadedFile(file)
+        setPdfUrl('') // URL 입력 초기화
+        setStatus('idle')
+        setError('')
+        
+        // 사용자에게 알림 표시
+        alert('딥리서치 모드: 파일이 업로드되었습니다. 요약 버튼을 눌러주세요.')
+        
+        return
+      }
+      
+      // 일반 모드에서는 기존 PDF 파일 검증
       if (file.type !== 'application/pdf') {
         alert('PDF 파일만 업로드 가능합니다.')
         return
@@ -147,7 +163,15 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
   /* ── API 호출 래퍼 ── */
   const callApi = useCallback(
     async (query: string, follow = false) => {
-      const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+      const API = process.env.NEXT_PUBLIC_API_URL ?? (typeof window !== 'undefined' && (window.location.hostname === 'cklsfamily.com' || window.location.hostname === 'www.cklsfamily.com') ? '' : 'http://localhost:8000')
+      
+      console.log('🔍 API URL 디버깅:', {
+        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+        hostname: typeof window !== 'undefined' ? window.location.hostname : 'undefined',
+        isCklsFamily: typeof window !== 'undefined' && (window.location.hostname === 'cklsfamily.com' || window.location.hostname === 'www.cklsfamily.com'),
+        finalAPI: API
+      });
+      
       if (!fileIdRef.current) return
 
       setStatus(follow ? 'loading-followup' : 'loading-summary')
@@ -241,7 +265,29 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
   )
 
   /* ── 핸들러 ── */
-  const handleSummary = () => {
+  const handleSummary = async () => {
+    // 딥리서치 모드 + 파일 업로드: 로컬 데모(md) 렌더링 유지
+    if (isDeepResearchMode && inputType === 'file') {
+      setStatus('loading-summary')
+      setError('')
+      try {
+        // 업로드 후 10초 대기
+        await new Promise(resolve => setTimeout(resolve, 10000))
+
+        const response = await fetch('/test-markdown.md')
+        const markdownContent = await response.text()
+        setSummary(markdownContent)
+        setPhase('summary')
+        setStatus('idle')
+        setError('')
+      } catch (error) {
+        setError('마크다운 파일을 불러오는데 실패했습니다.')
+        setStatus('idle')
+      }
+      return
+    }
+
+    // URL 입력(일반/딥리서치 공통): API 호출
     fileIdRef.current = genId(pdfUrl)
     callApi('SUMMARY_ALL')
   }
@@ -266,7 +312,7 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
     const ctrl = new AbortController()
 
     try {
-      const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+      const API = process.env.NEXT_PUBLIC_API_URL ?? (typeof window !== 'undefined' && (window.location.hostname === 'cklsfamily.com' || window.location.hostname === 'www.cklsfamily.com') ? '' : 'http://localhost:8000')
 
       const payload = {
         file_id: fileIdRef.current,
@@ -399,13 +445,13 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
             {inputType === 'file' && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  PDF 파일 업로드
+                  {isDeepResearchMode ? '파일 업로드 (모든 파일 타입 지원)' : 'PDF 파일 업로드'}
                 </label>
                 <div className="space-y-3">
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf"
+                    accept={isDeepResearchMode ? "*" : ".pdf"}
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -530,7 +576,7 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
 
       {/* 전체보기 모달 */}
       {showFullView && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm dark:bg-black/80 p-4">
           <div className="flex h-full w-full max-w-6xl flex-col rounded-lg bg-white shadow-xl dark:bg-neutral-800">
             {/* 모달 헤더 */}
             <div className={`flex items-center justify-between border-b p-4 ${
@@ -579,9 +625,35 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight]}
+                  urlTransform={(url) => url}
+                  components={{
+                    // 이미지 컴포넌트 커스터마이징
+                    img: ({ src, alt, ...props }) => {
+                      // 디버깅용 로그
+                      console.log('전체보기 img src:', src, 'type:', typeof src, 'length:', typeof src === 'string' ? src.length : 'N/A')
+                      
+                      // src가 없으면 이미지를 렌더링하지 않음
+                      if (!src) {
+                        console.log('전체보기: src가 없어서 null 반환')
+                        return null
+                      }
+                      
+                      console.log('전체보기: 일반 img 태그 렌더링')
+                      return (
+                        <img 
+                          src={src} 
+                          alt={alt || '이미지'} 
+                          className="my-6 max-w-full rounded-lg shadow-lg"
+                          onLoad={() => console.log('이미지 로드 성공:', typeof src === 'string' ? src.substring(0, 50) : 'Blob')}
+                          onError={() => console.log('이미지 로드 실패:', typeof src === 'string' ? src.substring(0, 50) : 'Blob')}
+                        />
+                      )
+                    },
+                  }}
                 >
                   {summary}
                 </ReactMarkdown>
+                
               </div>
             </div>
           </div>

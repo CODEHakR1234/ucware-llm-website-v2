@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 
-interface ArchiveItem {
+export interface ArchiveItem {
   id: string
   title: string
   content: string

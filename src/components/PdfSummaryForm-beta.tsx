@@ -72,7 +72,7 @@ export default function PdfSummaryForm() {
   /* ───────── 공통 API 호출 래퍼 ─────────── */
   const callApi = useCallback(
     async (query: string, followupMode = false) => {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (typeof window !== 'undefined' && window.location.hostname === 'cklsfamily.com' ? 'https://cklsfamily.com:8000' : 'http://localhost:8000')
       console.log('API_URL', API_URL)
       if (!fileIdRef.current) return
 
