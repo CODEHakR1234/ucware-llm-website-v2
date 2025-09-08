@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
         destination: 'http://localhost:8000/api/:path*',
       },
     ]
-  }
+  }//proxy for Lee Hakmyung's Server
 };
 
 export default nextConfig;
