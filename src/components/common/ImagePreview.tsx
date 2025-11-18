@@ -84,7 +84,7 @@ export default function ImagePreview({ src, alt = '이미지', className = '', t
     <>
       {/* 이미지 썸네일 */}
       <div
-        className={`relative ${enableModal ? 'cursor-pointer' : ''} overflow-hidden rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md dark:border-neutral-700 ${thumbnail ? 'h-48 md:h-64' : ''} ${className}`}
+        className={`relative ${enableModal ? 'cursor-pointer' : ''} overflow-hidden rounded-lg border border-gray-200 shadow-sm transition-all hover:shadow-md dark:border-neutral-700 ${thumbnail ? 'h-64 md:h-80' : ''} ${className}`}
         {...(enableModal
           ? {
               onClick: handleImageClick,
@@ -108,7 +108,8 @@ export default function ImagePreview({ src, alt = '이미지', className = '', t
           src={imageSrc}
           alt={alt}
           loading={isInstantScheme ? 'eager' : 'lazy'}
-          className={`${thumbnail ? 'h-full w-full object-cover' : 'max-h-full max-w-full object-contain'} transition-opacity duration-300 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
+          className={`${thumbnail ? 'h-full w-full object-contain' : 'w-full object-contain'} transition-opacity duration-300 ${imageLoading ? 'opacity-0' : 'opacity-100'}`}
+          style={thumbnail ? {} : { maxHeight: '80vh', width: 'auto', height: 'auto' }}
           onLoad={handleImageLoad}
           onError={handleImageError}
         />
@@ -124,11 +125,12 @@ export default function ImagePreview({ src, alt = '이미지', className = '', t
       {/* 확대 모달 */}
       {enableModal && isExpanded && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/80 backdrop-blur-sm dark:bg-black/80 p-4">
-          <div className="relative max-h-full max-w-full">
+          <div className="relative max-h-[90vh] max-w-[90vw]">
             <img
               src={imageSrc}
               alt={alt}
-              className="max-h-full max-w-full rounded-lg shadow-2xl"
+              className="max-h-[90vh] max-w-[90vw] rounded-lg shadow-2xl object-contain"
+              style={{ width: 'auto', height: 'auto' }}
             />
             
             {/* 닫기 버튼 */}

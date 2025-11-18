@@ -70,6 +70,35 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
   /* ── 아카이브 관련 ── */
   const { addToArchive } = useArchive()
 
+  // base64(data:), blob:, file:// 등 특수 스킴을 보존 (MarkdownPreview와 동일)
+  const allowAllUrls = (url: string) => url
+
+  // [IMG_X_Y] 패턴을 이미지 URL로 변환 (MarkdownPreview와 동일한 로직)
+  const convertImageReferences = (content: string, fileId?: string | null): string => {
+    if (!fileId) {
+      return content
+    }
+    
+    // 이미지는 작으니 프록시 사용 (HTTPS Mixed Content 문제 해결)
+    // localhost: 직접 호출, 프로덕션: Next.js 프록시 사용
+    const API = process.env.NEXT_PUBLIC_API_URL ?? 
+      (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+        ? 'http://localhost:8000' 
+        : '')
+    
+    // [IMG_X_Y] 또는 [IMG_X_Y:caption] 패턴을 찾아서 마크다운 이미지 문법으로 변환
+    const result = content.replace(
+      /\[(IMG_\d+_\d+)(?::([^\]]+))?\]/g,
+      (match, imageId, caption) => {
+        const imageUrl = `${API}/api/tutorial/${fileId}/image/${imageId}`
+        const altText = caption ? caption.trim() : '이미지'
+        return `![${altText}](${imageUrl})`
+      }
+    )
+    
+    return result
+  }
+
   const handleArchive = () => {
     if (!summary) return
 
@@ -264,26 +293,132 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
     [pdfUrl, lang],
   )
 
-  /* ── 핸들러 ── */
-  const handleSummary = async () => {
-    // 딥리서치 모드 + 파일 업로드: 로컬 데모(md) 렌더링 유지
-    if (isDeepResearchMode && inputType === 'file') {
+  /* ── 튜토리얼 API 호출 (딥리서치 모드) ── */
+  const callTutorial = useCallback(
+    async () => {
+      // Tutorial은 항상 직접 호출 (Next.js 프록시 우회)
+      const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+      if (!fileIdRef.current) {
+        console.log('[Tutorial] ❌ fileIdRef가 없어서 요청 취소')
+        return
+      }
+      
+      console.log('[Tutorial] 📤 튜토리얼 요청 시작:', {
+        url: `${API}/api/tutorial`,
+        file_id: fileIdRef.current,
+        pdf_url: pdfUrl,
+        lang: lang
+      })
+      
       setStatus('loading-summary')
       setError('')
       try {
-        // 업로드 후 10초 대기
-        await new Promise(resolve => setTimeout(resolve, 10000))
-
-        const response = await fetch('/test-markdown.md')
-        const markdownContent = await response.text()
-        setSummary(markdownContent)
+        const approxyPermit = getCookie('approxy_permit') || process.env.NEXT_PUBLIC_APPROXY_PERMIT || '';
+        // 언어 코드 매핑 (KO/EN/CN/JP -> ko/en/zh/ja)
+        const langMap: Record<string, string> = { KO: 'ko', EN: 'en', CN: 'zh', JP: 'ja' }
+        const tutorialLang = langMap[lang] || lang.toLowerCase()
+        
+        const requestBody = {
+          file_id: fileIdRef.current,
+          pdf_url: pdfUrl,
+          lang: tutorialLang,
+        }
+        
+        console.log('[Tutorial] 📋 요청 본문:', requestBody)
+        console.log('[Tutorial] 🌐 fetch 호출 시작...')
+        
+        const res = await fetch(`${API}/api/tutorial`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'cookie': approxyPermit ? `approxy_permit=${approxyPermit}` : ''
+          },
+          body: JSON.stringify(requestBody)
+        })
+        
+        console.log('[Tutorial] 📥 응답 받음:', {
+          status: res.status,
+          statusText: res.statusText,
+          ok: res.ok,
+          headers: Object.fromEntries(res.headers.entries())
+        })
+        
+        if (!res.ok) {
+          const errorText = await res.text()
+          console.error('[Tutorial] ❌ 서버 오류 응답:', {
+            status: res.status,
+            statusText: res.statusText,
+            body: errorText
+          })
+          throw new Error(`서버 오류 (${res.status}): ${errorText.substring(0, 200)}`)
+        }
+        
+        console.log('[Tutorial] ✅ 응답 파싱 시작...')
+        const data = await res.json()
+        console.log('[Tutorial] 📊 응답 데이터:', {
+          keys: Object.keys(data),
+          hasTutorial: !!data.tutorial,
+          hasError: !!data.error,
+          tutorialLength: data.tutorial?.length || 0,
+          error: data.error
+        })
+        
+        if (data.error) {
+          console.error('[Tutorial] ❌ 응답에 에러 포함:', data.error)
+          throw new Error(data.error)
+        }
+        
+        const tutorial = data.tutorial ?? data.summary ?? JSON.stringify(data)
+        console.log('[Tutorial] ✅ 튜토리얼 설정 완료:', {
+          source: data.tutorial ? 'tutorial' : (data.summary ? 'summary' : 'json'),
+          length: tutorial.length
+        })
+        
+        setSummary(tutorial)
+        setFollowupLog([])
         setPhase('summary')
-        setStatus('idle')
-        setError('')
-      } catch (error) {
-        setError('마크다운 파일을 불러오는데 실패했습니다.')
+        console.log('[Tutorial] 🎉 완료!')
+      } catch (e: unknown) {
+        console.error('[Tutorial] ❌ 예외 발생:', e)
+        if (e instanceof Error) {
+          console.error('[Tutorial] 에러 상세:', {
+            message: e.message,
+            name: e.name,
+            stack: e.stack
+          })
+          if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+            setError('❗ 네트워크 연결을 확인해주세요. 서버가 실행 중인지 확인해주세요.')
+          } else if (e.message.includes('JSON')) {
+            setError('❗ 서버 응답을 처리할 수 없습니다.')
+          } else {
+            setError(`❗ ${e.message}`)
+          }
+        } else {
+          console.error('[Tutorial] 알 수 없는 에러 타입:', typeof e, e)
+          setError('❗ 예기치 못한 오류가 발생했습니다.')
+        }
+      } finally {
+        console.log('[Tutorial] 🏁 상태를 idle로 변경')
         setStatus('idle')
       }
+    },
+    [pdfUrl, lang],
+  )
+
+  /* ── 핸들러 ── */
+  const handleSummary = async () => {
+    // 딥리서치 모드: 튜토리얼 API 호출 (URL 방식만 지원)
+    if (isDeepResearchMode) {
+      if (inputType === 'file') {
+        alert('딥리서치 튜토리얼은 현재 URL 입력만 지원합니다. PDF URL을 입력해주세요.')
+        return
+      }
+      if (!pdfUrl.trim()) {
+        alert('PDF URL을 입력해주세요.')
+        return
+      }
+      fileIdRef.current = genId(pdfUrl)
+      await callTutorial()
       return
     }
 
@@ -551,6 +686,7 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
                 isDeepResearchMode={isDeepResearchMode}
                 showFullView={true}
                 onFullView={() => setShowFullView(true)}
+                fileId={fileIdRef.current || undefined}
               />
             </div>
           )}
@@ -574,9 +710,9 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
         </AnimatePresence>
       </motion.section>
 
-      {/* 전체보기 모달 */}
+      {/* 전체보기 모달 - MarkdownPreview와 동일한 구조 */}
       {showFullView && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm dark:bg-black/80 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
           <div className="flex h-full w-full max-w-6xl flex-col rounded-lg bg-white shadow-xl dark:bg-neutral-800">
             {/* 모달 헤더 */}
             <div className={`flex items-center justify-between border-b p-4 ${
@@ -615,7 +751,7 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
               </div>
             </div>
 
-            {/* 모달 내용 */}
+            {/* 모달 내용 - MarkdownPreview와 정확히 동일 */}
             <div className="flex-1 overflow-y-auto p-6">
               <div className={`prose prose-lg max-w-none transition-colors duration-500 ${
                 isDeepResearchMode
@@ -625,35 +761,25 @@ export default function PdfSummaryForm({ isDeepResearchMode = false }: PdfSummar
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight]}
-                  urlTransform={(url) => url}
+                  urlTransform={allowAllUrls}
                   components={{
-                    // 이미지 컴포넌트 커스터마이징
-                    img: ({ src, alt, ...props }) => {
-                      // 디버깅용 로그
-                      console.log('전체보기 img src:', src, 'type:', typeof src, 'length:', typeof src === 'string' ? src.length : 'N/A')
-                      
-                      // src가 없으면 이미지를 렌더링하지 않음
-                      if (!src) {
-                        console.log('전체보기: src가 없어서 null 반환')
-                        return null
-                      }
-                      
-                      console.log('전체보기: 일반 img 태그 렌더링')
-                      return (
-                        <img 
-                          src={src} 
-                          alt={alt || '이미지'} 
-                          className="my-6 max-w-full rounded-lg shadow-lg"
-                          onLoad={() => console.log('이미지 로드 성공:', typeof src === 'string' ? src.substring(0, 50) : 'Blob')}
-                          onError={() => console.log('이미지 로드 실패:', typeof src === 'string' ? src.substring(0, 50) : 'Blob')}
-                        />
-                      )
-                    },
+                    img: ({ src, alt, ...props }) => (
+                      <ImagePreview 
+                        src={src || ''} 
+                        alt={alt || '이미지'} 
+                        className="my-6 w-full"
+                        thumbnail={false}
+                      />
+                    ),
                   }}
                 >
-                  {summary}
+                  {(() => {
+                    // MarkdownPreview와 동일한 이미지 변환 처리 순서
+                    const contentWithImageRefs = convertImageReferences(summary, fileIdRef.current)
+                    const processedContent = convertUrlsToImages(contentWithImageRefs)
+                    return processedContent
+                  })()}
                 </ReactMarkdown>
-                
               </div>
             </div>
           </div>

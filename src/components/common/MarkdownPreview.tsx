@@ -14,6 +14,7 @@ interface MarkdownPreviewProps {
   isDeepResearchMode?: boolean
   showFullView?: boolean
   onFullView?: () => void
+  fileId?: string  // 튜토리얼 이미지 로드용
 }
 
 // 마크다운에서 첫 번째 대제목(h1) 추출하는 함수
@@ -40,12 +41,54 @@ const extractText = (node: React.ReactNode): string => {
   return ''
 }
 
+// [IMG_X_Y] 패턴을 이미지 URL로 변환
+const convertImageReferences = (content: string, fileId?: string): string => {
+  if (!fileId) {
+    console.log('[MarkdownPreview] ⚠️ fileId 없음, 이미지 변환 스킵')
+    return content
+  }
+  
+  // 이미지는 작으니 프록시 사용 (HTTPS Mixed Content 문제 해결)
+  // localhost: 직접 호출, 프로덕션: Next.js 프록시 사용
+  const API = process.env.NEXT_PUBLIC_API_URL ?? 
+    (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
+      ? 'http://localhost:8000' 
+      : '')
+  
+  console.log('[MarkdownPreview] 🖼️ 이미지 변환 시작:', {
+    fileId,
+    API,
+    contentLength: content.length,
+    hasImagePattern: /\[IMG_\d+_\d+/.test(content)
+  })
+  
+  // [IMG_X_Y] 또는 [IMG_X_Y:caption] 패턴을 찾아서 마크다운 이미지 문법으로 변환
+  const result = content.replace(
+    /\[(IMG_\d+_\d+)(?::([^\]]+))?\]/g,
+    (match, imageId, caption) => {
+      const imageUrl = `${API}/api/tutorial/${fileId}/image/${imageId}`
+      const altText = caption ? caption.trim() : '이미지'
+      console.log('[MarkdownPreview] 🔄 이미지 변환:', {
+        match,
+        imageId,
+        imageUrl,
+        altText
+      })
+      return `![${altText}](${imageUrl})`
+    }
+  )
+  
+  console.log('[MarkdownPreview] ✅ 이미지 변환 완료')
+  return result
+}
+
 export default function MarkdownPreview({ 
   content, 
   title = "분석 결과", 
   isDeepResearchMode = false,
   showFullView = false,
-  onFullView
+  onFullView,
+  fileId
 }: MarkdownPreviewProps) {
   const [showFullModal, setShowFullModal] = useState(false)
   
@@ -56,8 +99,10 @@ export default function MarkdownPreview({
   const extractedTitle = !title || title === "분석 결과" ? extractTitle(content) : title
   const displayTitle = extractedTitle || title || (isDeepResearchMode ? '딥리서치 분석 결과' : '요약 결과')
   
+  // 이미지 참조 변환 ([IMG_X_Y] → 이미지 URL)
+  const contentWithImageRefs = convertImageReferences(content, fileId)
   // 이미지 URL을 마크다운 이미지 문법으로 변환
-  const processedContent = convertUrlsToImages(content)
+  const processedContent = convertUrlsToImages(contentWithImageRefs)
 
   return (
     <>
@@ -115,7 +160,7 @@ export default function MarkdownPreview({
                   <ImagePreview 
                     src={src} 
                     alt={alt || '이미지'} 
-                    className="my-4 max-w-full"
+                    className="my-4 w-full"
                     thumbnail={true}
                   />
                 )
@@ -215,7 +260,7 @@ export default function MarkdownPreview({
                       <ImagePreview 
                         src={src || ''} 
                         alt={alt || '이미지'} 
-                        className="my-6"
+                        className="my-6 w-full"
                         thumbnail={false}
                       />
                     ),
