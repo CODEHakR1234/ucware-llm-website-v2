@@ -5,9 +5,8 @@ LLM을 활용해 PDF 문서를 요약하고, 질문에 답하고, 학습 자료�
 ## 주요 기능
 
 <p align="center">
-  <img src="./public/images/home_summary.jpeg" width="32%" />
-  <img src="./public/images/Deep_research.png" width="32%" />
-  <img src="./public/images/Tutorial.png" width="32%" />
+  <img src="./public/images/home_summary.jpeg" width="50%" />
+  <img src="./public/images/Deep_research.png" width="50%" />
 </p>
 
 ### 1. PDF 요약 및 질의응답
@@ -19,6 +18,10 @@ LLM을 활용해 PDF 문서를 요약하고, 질문에 답하고, 학습 자료�
 - 더 심층적인 PDF 분석
 - 문서 구조화 및 핵심 내용 추출
 - 사용자 맞춤형 요약
+
+<p>
+<img src="./public/images/Tutorial.png" width="33%" />
+</p>
 
 ### 3. 튜토리얼 자동 생성
 - PDF를 기반으로 학습 자료 자동 생성
