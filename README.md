@@ -7,9 +7,7 @@ LLM을 활용해 PDF 문서를 요약하고, 질문에 답하고, 학습 자료�
 <p>
   <img src="./public/images/home_summary.jpeg" width="50%" />
   <img src="./public/images/Deep_research.png" width="50%" />
-</p>
-<p>
-<img src="./public/images/Tutorial.png" width="33%" />
+  <img src="./public/images/Tutorial.png" width="33%" />
 </p>
 
 ### 1. PDF 요약 및 질의응답
